@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Green Eye | Plant Care AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f0f4f0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .chat-container { max-width: 800px; margin: 30px auto; background: white; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        .chat-header { background: #2d5a27; color: white; padding: 20px; }
+        #chat-display { height: 500px; overflow-y: auto; padding: 20px; border-bottom: 1px solid #eee; background-image: url('https://www.transparenttextures.com/patterns/leaf.png'); }
+        .message { margin-bottom: 15px; padding: 12px 18px; border-radius: 15px; width: fit-content; position: relative; }
+        .user-msg { background: #e1f0da; margin-left: auto; border-bottom-right-radius: 2px; color: #2d5a27; max-width: 75%; }
+        .bot-msg { background: #ffffff; border: 1px solid #ddd; margin-right: auto; border-bottom-left-radius: 2px; max-width: 85%; white-space: pre-wrap; }
+        
+        /* NEW: Liquid Orb Animation */
+        .voice-overlay {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            border-top: 1px solid #eee;
+        }
+        .orb {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(45deg, #2d5a27, #5cb85c);
+            border-radius: 50%;
+            animation: pulse-orb 1.2s infinite ease-in-out;
+            box-shadow: 0 0 0 0 rgba(45, 90, 39, 0.7);
+        }
+        @keyframes pulse-orb {
+            0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(45, 90, 39, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(45, 90, 39, 0); }
+            100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(45, 90, 39, 0); }
+        }
+        
+        .mic-active { color: white !important; background-color: #d9534f !important; border-color: #d9534f !important; }
+        #lang-select { max-width: 140px; border-right: 0; border-radius: 5px 0 0 5px; }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-header d-flex justify-content-between align-items-center">
+        <h2 class="m-0"><i class="bi bi-eye"></i> Green Eye</h2>
+        <small>AI Plant Pathologist</small>
+    </div>
+
+    <div id="chat-display" class="d-flex flex-column">
+        <div class="message bot-msg">Welcome. Select your language and tap the microphone to begin analysis.</div>
+    </div>
+
+    <div id="voice-overlay" class="voice-overlay">
+        <div class="orb"></div>
+        <small class="mt-2 text-success fw-bold">Listening for symptoms...</small>
+    </div>
+
+    <div class="p-3 bg-light">
+        <div class="input-group">
+            <select class="form-select" id="lang-select">
+                <option value="en-US">English</option>
+                <option value="hi-IN">हिन्दी (Hindi)</option>
+                <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+                <option value="bn-IN">বাংলা (Bengali)</option>
+            </select>
+            
+            <button class="btn btn-outline-secondary" type="button" id="mic-btn">
+                <i class="bi bi-mic-fill"></i>
+            </button>
+            
+            <input type="text" id="user-input" class="form-control" placeholder="Ask anything about plant health...">
+            
+            <button class="btn btn-success" type="button" id="send-btn">
+                <i class="bi bi-send-fill"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = ""; 
+    // const TOKEN = ""; 
+    const ORG_ID = ""; 
+
+    const chatDisplay = document.getElementById('chat-display');
+    const userInput = document.getElementById('user-input');
+    const langSelect = document.getElementById('lang-select');
+    const micBtn = document.getElementById('mic-btn');
+    const voiceOverlay = document.getElementById('voice-overlay');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+            micBtn.classList.add('mic-active');
+            voiceOverlay.style.display = 'flex';
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            userInput.value = transcript;
+            handleSendMessage(); 
+        };
+
+        recognition.onerror = (e) => {
+            console.error(e.error);
+            stopUI();
+        };
+
+        recognition.onend = () => stopUI();
+    }
+
+    function stopUI() {
+        micBtn.classList.remove('mic-active');
+        voiceOverlay.style.display = 'none';
+    }
+
+    micBtn.onclick = () => {
+        if (!recognition) return;
+        recognition.lang = langSelect.value;
+        try { recognition.start(); } catch (e) { recognition.stop(); }
+    };
+
+    async function handleSendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        appendMessage(text, 'user-msg');
+        userInput.value = '';
+
+        const loadingDiv = appendMessage("Thinking...", 'bot-msg');
+        loadingDiv.classList.add('text-muted', 'fst-italic');
+        
+        const statuses = ["Reasoning...", "Analyzing symptoms...", "Evaluating treatment...", "Looking up pesticides..."];
+        let i = 0;
+        const interval = setInterval(() => {
+            loadingDiv.innerText = statuses[++i % statuses.length];
+        }, 6000);
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${TOKEN}`,
+                    'X-DataStax-Current-Org': ORG_ID
+                },
+                body: JSON.stringify({
+                    input_value: text,
+                    input_type: "chat",
+                    output_type: "chat",
+                })
+            });
+
+            const data = await response.json();
+            const botResponse = data.outputs[0].outputs[0].results.message.text;
+            
+            clearInterval(interval);
+            loadingDiv.remove();
+            appendMessage(botResponse, 'bot-msg');
+
+        } catch (error) {
+            clearInterval(interval);
+            loadingDiv.innerText = "Error: Check your API settings.";
+        }
+    }
+
+    function appendMessage(text, className) {
+        const div = document.createElement('div');
+        div.className = `message ${className}`;
+        div.innerText = text;
+        chatDisplay.appendChild(div);
+        chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        return div;
+    }
+
+    document.getElementById('send-btn').onclick = handleSendMessage;
+    userInput.onkeypress = (e) => { if (e.key === 'Enter') handleSendMessage(); };
+</script>
+
+</body>
+</html>
